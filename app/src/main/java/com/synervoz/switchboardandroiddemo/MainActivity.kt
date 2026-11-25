@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.synervoz.switchboardandroiddemo.ui.examples.openailive.OpenAILiveScreen
 import com.synervoz.switchboardandroiddemo.ui.examples.sherpatts.SherpaTTSScreen
 import com.synervoz.switchboardandroiddemo.ui.examples.whisperstt.WhisperSTTScreen
 import com.synervoz.switchboardandroiddemo.ui.examples.whisperstttosherpatts.WhisperSTTtoSherpaTTSScreen
@@ -36,6 +37,7 @@ private enum class Screen(val title: String) {
     SHERPA_TTS("Sherpa TTS"),
     WHISPER_STT("Whisper STT"),
     STT_TO_TTS("Whisper STT to Sherpa TTS"),
+    OPENAI_LIVE("OpenAI Live"),
 }
 
 class MainActivity : ComponentActivity() {
@@ -64,6 +66,10 @@ class MainActivity : ComponentActivity() {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // OpenAI Live's foreground service notification.
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         for (permission in permissions) {
             if (ContextCompat.checkSelfPermission(
@@ -97,6 +103,7 @@ private fun DemoApp() {
             Screen.SHERPA_TTS -> SherpaTTSScreen(modifier = contentModifier)
             Screen.WHISPER_STT -> WhisperSTTScreen(modifier = contentModifier)
             Screen.STT_TO_TTS -> WhisperSTTtoSherpaTTSScreen(modifier = contentModifier)
+            Screen.OPENAI_LIVE -> OpenAILiveScreen(modifier = contentModifier)
         }
     }
 }
@@ -112,7 +119,7 @@ private fun MenuScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
     ) {
-        for (target in listOf(Screen.SHERPA_TTS, Screen.WHISPER_STT, Screen.STT_TO_TTS)) {
+        for (target in listOf(Screen.SHERPA_TTS, Screen.WHISPER_STT, Screen.STT_TO_TTS, Screen.OPENAI_LIVE)) {
             Button(
                 onClick = { onSelect(target) },
                 modifier = Modifier.fillMaxWidth(),
