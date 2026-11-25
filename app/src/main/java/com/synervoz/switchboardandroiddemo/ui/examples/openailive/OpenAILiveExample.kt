@@ -13,8 +13,6 @@ import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.synervoz.switchboard.sdk.Switchboard
 import com.synervoz.switchboard.sdk.SwitchboardResult
-import com.synervoz.switchboardandroiddemo.SWITCHBOARD_APP_ID
-import com.synervoz.switchboardandroiddemo.SWITCHBOARD_APP_SECRET
 import org.json.JSONObject
 
 private const val ENGINE_JSON = "OpenAILiveExample.json"
@@ -63,10 +61,6 @@ class OpenAILiveExample(context: Context) {
 
     fun start() {
         if (isRunning) return
-        if (SWITCHBOARD_APP_ID.isEmpty() || SWITCHBOARD_APP_SECRET.isEmpty()) {
-            status("Set your Switchboard app's ID and secret in DemoApplication.kt. Register an app at console.switchboard.audio/register.")
-            return
-        }
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {

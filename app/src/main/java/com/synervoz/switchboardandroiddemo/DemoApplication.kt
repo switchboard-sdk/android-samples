@@ -7,11 +7,6 @@ import com.synervoz.switchboardsherpa.SherpaExtension
 import com.synervoz.switchboardsilerovad.SileroVADExtension
 import com.synervoz.switchboardwhisper.WhisperExtension
 
-// Your Switchboard app's ID and secret, for OpenAI Live; the other examples run without them.
-// Register an app at https://console.switchboard.audio/register.
-const val SWITCHBOARD_APP_ID = ""
-const val SWITCHBOARD_APP_SECRET = ""
-
 /**
  * Loads the Switchboard extensions and initializes the SDK exactly once per process.
  *
@@ -29,15 +24,19 @@ class DemoApplication : Application() {
         SherpaExtension.load()
         OpenAIExtension.load()
 
+        // "demo" runs every example but OpenAI Live, which needs your own Switchboard app: register one at
+        // https://console.switchboard.audio/register and put its appID and appSecret here.
         val initResult = Switchboard.initialize(
-            context = this,
-            appId = SWITCHBOARD_APP_ID,
-            appSecret = SWITCHBOARD_APP_SECRET,
-            extensions = mapOf(
-                "Whisper" to emptyMap<String, Any>(),
-                "Silero" to emptyMap<String, Any>(),
-                "Sherpa" to emptyMap<String, Any>(),
-                "OpenAI" to emptyMap<String, Any>(),
+            this,
+            mapOf(
+                "appID" to "demo",
+                "appSecret" to "demo",
+                "extensions" to mapOf(
+                    "Whisper" to emptyMap<String, Any>(),
+                    "Silero" to emptyMap<String, Any>(),
+                    "Sherpa" to emptyMap<String, Any>(),
+                    "OpenAI" to emptyMap<String, Any>(),
+                ),
             ),
         )
 

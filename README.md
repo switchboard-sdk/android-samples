@@ -36,7 +36,7 @@ The OpenAI Live example holds a voice conversation with OpenAI GPT-Live through 
 [`OpenAI.Live` node](https://docs.switchboard.audio/extensions/openai/openai-live-node).
 
 It needs your own Switchboard app: [register one](https://console.switchboard.audio/register), then
-put its ID and secret in `DemoApplication.kt`.
+replace `"demo"` with its `appID` and `appSecret` in `DemoApplication.kt`.
 
 Allow the microphone and notifications when the app asks, open **OpenAI Live** and press Start.
 Then talk; the transcript shows as you go. Say "play some music" or "pause the music" to try the
