@@ -38,7 +38,7 @@ private val WIRED_HEADSETS = setOf(
  *
  * Each [start] creates the engine from OpenAILiveExample.json and starts a new conversation;
  * [stop] ends it. The assistant's tools (play and pause the music) are answered here,
- * in [handleToolCall].
+ * in [runTool].
  */
 class OpenAILiveExample(context: Context) {
     interface Listener {
@@ -52,42 +52,41 @@ class OpenAILiveExample(context: Context) {
     /** Called on the main thread. */
     var listener: Listener? = null
 
-    var isRunning: Boolean = false
-        private set
+    val isRunning: Boolean
+        get() = engineId != null
 
     private val appContext = context.applicationContext
     private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val mainHandler = Handler(Looper.getMainLooper())
     private var engineId: String? = null
     private val eventListeners = mutableListOf<Int>()
-    private var connectedBefore = false
 
-    fun start(): Boolean {
-        if (isRunning) return true
+    fun start() {
+        if (isRunning) return
         if (SWITCHBOARD_APP_ID.isEmpty() || SWITCHBOARD_APP_SECRET.isEmpty()) {
             status("Set your Switchboard app's ID and secret in DemoApplication.kt. Register an app at console.switchboard.audio/register.")
-            return false
+            return
         }
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
             status("Allow microphone access in the app's settings, then try again.")
-            return false
+            return
         }
 
         val engineJson = JSONObject(appContext.assets.open(ENGINE_JSON).bufferedReader().use { it.readText() })
         // Loudspeaker only when no headset is used.
-        if (!useBluetoothHeadset() && connectedHeadset(WIRED_HEADSETS) == null) {
+        val headsetUsed = useBluetoothHeadset() || connectedHeadset(WIRED_HEADSETS) != null
+        if (!headsetUsed) {
             engineJson.getJSONObject("config").put("speakerphoneOn", true)
         }
         val createResult = Switchboard.createEngine(engineJson.toString())
         val id = createResult.value
         if (createResult.isError || id == null) {
             status("Failed to create the engine: ${createResult.error}")
-            return false
+            return
         }
         engineId = id
-        connectedBefore = false
         addEventListeners()
 
         ContextCompat.startForegroundService(appContext, Intent(appContext, OpenAILiveService::class.java))
@@ -95,11 +94,9 @@ class OpenAILiveExample(context: Context) {
         if (startResult.isError) {
             status("Failed to start the engine: ${startResult.error}")
             stop()
-            return false
+            return
         }
-        isRunning = true
         status("Connecting…")
-        return true
     }
 
     fun stop() {
@@ -109,7 +106,6 @@ class OpenAILiveExample(context: Context) {
         eventListeners.clear()
         Switchboard.destroyEngine(id)
         engineId = null
-        isRunning = false
         appContext.startService(Intent(appContext, OpenAILiveService::class.java).setAction(OpenAILiveService.ACTION_STOP))
         restoreAudioMode()
     }
@@ -129,13 +125,14 @@ class OpenAILiveExample(context: Context) {
         listen("toolCall") { data ->
             val callId = data["callId"] as? String ?: return@listen
             val name = data["name"] as? String ?: return@listen
-            val output = handleToolCall(name)
-            status(if (output.ok) "[$name]" else "[$name failed: ${output.json}]")
-
-            val answer = if (output.ok) {
-                Switchboard.callAction(LIVE_NODE, "submitToolResult", mapOf("callId" to callId, "outputJson" to output.json))
+            val error = runTool(name)
+            val answer = if (error == null) {
+                status("[$name]")
+                Switchboard.callAction(LIVE_NODE, "submitToolResult", mapOf("callId" to callId, "outputJson" to """{"ok":true}"""))
             } else {
-                Switchboard.callAction(LIVE_NODE, "submitToolError", mapOf("callId" to callId, "errorJson" to output.json))
+                status("[$name failed: $error]")
+                val errorJson = JSONObject().put("error", error).toString()
+                Switchboard.callAction(LIVE_NODE, "submitToolError", mapOf("callId" to callId, "errorJson" to errorJson))
             }
             if (answer.isError) {
                 status("[Failed to answer $name: ${answer.error}]")
@@ -144,8 +141,7 @@ class OpenAILiveExample(context: Context) {
 
         // Session state
         listen("sessionStarted") {
-            status(if (connectedBefore) "Connected." else "Connected. Start talking.")
-            connectedBefore = true
+            status(if (it["continued"] == true) "Connected." else "Connected. Start talking.")
         }
         listen("sessionPaused") { status("Standby: paused after 15 s of quiet. Speak to resume.") }
         listen("sessionResumed") { status("Standby: resumed.") }
@@ -153,7 +149,9 @@ class OpenAILiveExample(context: Context) {
             status("Idle: the session closed after 30 s of quiet. Speak to continue the conversation.")
         }
         listen("sessionWoken") { status("Idle: reopened.") }
-        listen("sessionDisconnected") { status("Connection lost. Reconnecting.") }
+        listen("sessionDisconnected") {
+            status(if (it["reconnecting"] == true) "Connection lost. Reconnecting." else "Session refused. Press Stop, then Start to try again.")
+        }
         listen("error") { data ->
             status("Error: ${data["type"]} ${data["code"]}: ${data["message"]}")
         }
@@ -161,32 +159,25 @@ class OpenAILiveExample(context: Context) {
 
     // Tools
 
-    private class ToolOutput(val ok: Boolean, val json: String)
-
-    private fun handleToolCall(name: String): ToolOutput = when (name) {
-        "play_music" -> playMusic()
-        "pause_music" -> musicResult(Switchboard.callAction(MUSIC_PLAYER_NODE, "pause"), playing = false)
-        else -> toolError("Unknown tool: $name")
+    // Runs a tool: null when it worked, otherwise the error.
+    private fun runTool(name: String): String? {
+        val result = when (name) {
+            "play_music" -> playMusic()
+            "pause_music" -> Switchboard.callAction(MUSIC_PLAYER_NODE, "pause")
+            else -> return "Unknown tool: $name"
+        }
+        return if (result.isError) result.error ?: "Unknown error" else null
     }
 
-    // Resumes the track if it's open (paused), otherwise loads it, which starts it since the player has autoPlay.
-    private fun playMusic(): ToolOutput {
+    // Resumes the track if it's open (paused), otherwise loads it, which starts it: the player plays what it loads.
+    private fun playMusic(): SwitchboardResult<*> {
         val state = Switchboard.getValue(MUSIC_PLAYER_NODE, "state").value as? String
         return if (state in OPEN_MUSIC_STATES) {
-            musicResult(Switchboard.callAction(MUSIC_PLAYER_NODE, "play"), playing = true)
+            Switchboard.callAction(MUSIC_PLAYER_NODE, "play")
         } else {
-            musicResult(Switchboard.callAction(MUSIC_PLAYER_NODE, "load", mapOf("url" to MUSIC_URL)), playing = true)
+            Switchboard.callAction(MUSIC_PLAYER_NODE, "load", mapOf("url" to MUSIC_URL))
         }
     }
-
-    private fun musicResult(result: SwitchboardResult<*>, playing: Boolean): ToolOutput =
-        if (result.isError) {
-            toolError(result.error ?: "Unknown error")
-        } else {
-            ToolOutput(true, JSONObject().put("playing", playing).toString())
-        }
-
-    private fun toolError(message: String) = ToolOutput(false, JSONObject().put("error", message).toString())
 
     // Audio routing, chosen once at start. Headsets connected or disconnected during the
     // conversation need Stop and Start.
@@ -196,17 +187,15 @@ class OpenAILiveExample(context: Context) {
 
     // Android picks wired headsets itself; a Bluetooth one must be selected, and its call audio
     // may take a moment to come up, or never does. Waits up to 3 s; false means not used.
+    @Suppress("DEPRECATION")
     private fun useBluetoothHeadset(): Boolean {
         val headset = connectedHeadset(BLUETOOTH_HEADSETS) ?: return false
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             audioManager.setCommunicationDevice(headset)
         } else {
-            @Suppress("DEPRECATION")
-            run {
-                audioManager.startBluetoothSco()
-                audioManager.isBluetoothScoOn = true
-            }
+            audioManager.startBluetoothSco()
+            audioManager.isBluetoothScoOn = true
         }
         repeat(30) {
             if (bluetoothCallAudioOn()) return true
@@ -225,16 +214,14 @@ class OpenAILiveExample(context: Context) {
         }
 
     // The audio mode and route are process-wide, so other examples would inherit them.
+    @Suppress("DEPRECATION")
     private fun restoreAudioMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             audioManager.clearCommunicationDevice()
         } else {
-            @Suppress("DEPRECATION")
-            run {
-                audioManager.stopBluetoothSco()
-                audioManager.isBluetoothScoOn = false
-                audioManager.isSpeakerphoneOn = false
-            }
+            audioManager.stopBluetoothSco()
+            audioManager.isBluetoothScoOn = false
+            audioManager.isSpeakerphoneOn = false
         }
         audioManager.mode = AudioManager.MODE_NORMAL
     }
