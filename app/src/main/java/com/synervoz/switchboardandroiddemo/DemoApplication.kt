@@ -2,6 +2,7 @@ package com.synervoz.switchboardandroiddemo
 
 import android.app.Application
 import com.synervoz.switchboard.sdk.Switchboard
+import com.synervoz.switchboardopenai.OpenAIExtension
 import com.synervoz.switchboardsherpa.SherpaExtension
 import com.synervoz.switchboardsilerovad.SileroVADExtension
 import com.synervoz.switchboardwhisper.WhisperExtension
@@ -21,15 +22,21 @@ class DemoApplication : Application() {
         WhisperExtension.load()
         SileroVADExtension.load()
         SherpaExtension.load()
+        OpenAIExtension.load()
 
+        // "demo" runs every example but OpenAI Live, which needs your own Switchboard app: register one at
+        // https://console.switchboard.audio/register and put its appID and appSecret here.
         val initResult = Switchboard.initialize(
-            context = this,
-            appId = "demo",
-            appSecret = "demo",
-            extensions = mapOf(
-                "Whisper" to emptyMap<String, Any>(),
-                "Silero" to emptyMap<String, Any>(),
-                "Sherpa" to emptyMap<String, Any>(),
+            this,
+            mapOf(
+                "appID" to "demo",
+                "appSecret" to "demo",
+                "extensions" to mapOf(
+                    "Whisper" to emptyMap<String, Any>(),
+                    "Silero" to emptyMap<String, Any>(),
+                    "Sherpa" to emptyMap<String, Any>(),
+                    "OpenAI" to emptyMap<String, Any>(),
+                ),
             ),
         )
 

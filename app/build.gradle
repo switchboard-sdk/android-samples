@@ -51,6 +51,7 @@ dependencies {
     implementation 'com.synervoz.switchboard.extensions:silerovad:3.3.0'
     implementation 'com.synervoz.switchboard.extensions:onnx:3.3.0'
     implementation 'com.synervoz.switchboard.extensions:sherpa:3.3.0'
+    implementation 'com.synervoz.switchboard.extensions:openai:3.3.0'
 
 //    Switchboard SDK and Extensions from local AAR files
 //    implementation fileTree(dir: '../libs', include: ['*.aar'])
@@ -59,6 +60,7 @@ dependencies {
 //    implementation files('../libs/SwitchboardSileroVAD.aar')
 //    implementation files('../libs/SwitchboardOnnx.aar')
 //    implementation files('../libs/SwitchboardSherpa.aar')
+//    implementation files('../libs/SwitchboardOpenAI.aar')
 
     implementation 'com.google.code.gson:gson:2.10.1'
 
